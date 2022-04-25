@@ -1,0 +1,159 @@
+How to install oracle binaries using silent method.
+
+step 1: Download Oracle database software:
+        We need to down load software from https://www.oracle.com/database/technologies/oracle-database-software-downloads.html#19c
+		
+		    I have downloaded  below 19.3 software for my Linux x86-64 machine.
+		    LINUX.X64_193000_db_home.zip
+
+step 2: Login to the Linux machine and check for oinstall,dba and oper groups also for oracle user.
+        if not inform Unix Admin team to create those. Also as per the readme inform unix team to install below packages.
+                yum install -y bc    
+                yum install -y binutils
+                yum install -y dtrace-modules
+                yum install -y dtrace-modules-headers
+                yum install -y dtrace-modules-provider-headers
+                yum install -y dtrace-utils
+                yum install -y elfutils-libelf
+                yum install -y elfutils-libelf-devel
+                yum install -y fontconfig-devel
+                yum install -y glibc
+                yum install -y glibc-devel
+                yum install -y ksh
+                yum install -y libaio
+                yum install -y libaio-devel
+                yum  install -y libdtrace-ctf-devel
+                yum install -y libXrender
+                yum install -y libXrender-devel
+                yum install -y libX11
+                yum install -y libXau 
+                yum install -y libXi
+                yum install -y libXtst
+                yum install -y libgcc
+                yum install -y librdmacm-devel
+                yum install -y libstdc++
+                yum install -y libstdc++-devel
+                yum install -y libxcb
+                yum install -y make
+                yum install -y net-tools 
+                yum install -y nfs-utils 
+                yum install -y python 
+                yum install -y python-configshell 
+                yum install -y python-rtslib 
+                yum install -y python-six 
+                yum install -y targetcli 
+                yum install -y smartmontools
+                yum install -y sysstat
+			            # New for OL8
+                yum install -y libnsl
+                yum install -y libnsl.i686
+                yum install -y libnsl2
+                yum install -y libnsl2.i686
+		
+step 3: Inform Unix admin to create below directories and change ownership to oracle as below
+		          mkdir -p /u01/app/oracle                    --> this is for ORACLE_BASE
+		          mkdir -p /u01/app/oraInventory       	    --> this is for Centrol Inventory
+		          mkdir -p /u01/app/oracle/product/19.3/db_1  --> this is for ORACLE_HOME 
+		          mkdir -p /u01/app/oracle/oradata            --> this is for plase database files.
+		
+		          chown -R oracle:oinstall /u01  --> change ownership to user oracle and group oinstall
+		          chmod -R 775 /u01              --> change permissions to the mountpoint /u01
+		
+step 4: Once Unix team confirms copy the software which was downloaded in step 1.
+        We cane use WinSCp tool to copy from jumpbox to linux machine.
+		    copy above file to /tmp location first then change permissions to 777 
+		    after that switch to oracle user and copy it to ORACLE_HOME directory which was created in step 3.
+		
+		        Winscp to /tmp/Downloads
+		        chmod 777 /tmp/Downloads/LINUX.X64_193000_db_home.zip 
+		        sudo su - oracle
+		        cd /u01/app/oracle/product/19.3/db_1
+		         cp /tmp/Downloads/LINUX.X64_193000_db_home.zip .
+		
+step 5: extract the oracle binaries
+            cd  /u01/app/oracle/product/19.3/db_1
+            unzip LINUX.X64_193000_db_home.zip
+
+step 6: After completion of the extract go to install/response directory to prepare response file:
+            cd /u01/app/oracle/product/19.3/db_1/install/response
+		
+		    copy existing db_install.rsp to db_install.rsp.bkp, then edit db_install.rsp file with below parameter values.
+		
+		      cp db_install.rsp db_install.rsp.bkp
+		      vi db_install.rsp        --> modify below parameter values.
+		
+		      oracle.install.option=INSTALL_DB_SWONLY
+		      UNIX_GROUP_NAME=oinstall
+		      INVENTORY_LOCATION=/u01/app/oraInventory
+		      ORACLE_HOME=/u01/app/oracle/product/19.3/db_1
+		      ORACLE_BASE=/u01/app/oracle
+		      oracle.install.db.InstallEdition=EE
+		      oracle.install.db.OSDBA_GROUP=dba
+		      oracle.install.db.OSOPER_GROUP=dba
+		      oracle.install.db.OSBACKUPDBA_GROUP=dba
+		      oracle.install.db.OSDGDBA_GROUP=dba
+		      oracle.install.db.OSKMDBA_GROUP=dba
+		      oracle.install.db.OSRACDBA_GROUP=dba
+		
+		then save the above file. (shift :wq!)
+		
+step 7: Change directory to ORACLE_HOME  and execute the runInstaller as below.
+       ./runInstaller -silent -responseFile /u01/app/oracle/product/19.3/db_1/install/response/db_install.rsp
+
+step 8: At the end of the installation it prompt to run below scripts.
+
+        As a root user, execute the following script(s):
+          1. /u01/app/oraInventory/orainstRoot.sh  --> If we are installin first time in the server we need to run this script.
+          2. /u01/app/oracle/product/19.3/db_1/root.sh
+          
+Our Installation is complete.
+
+ 
+Why we need to run orainstRoot.sh script?
+     It will perform below actions.
+		  1. Changing permissions of /u01/app/oraInventory.
+		  2. Adding read,write permissions for group.
+		  3. Removing read,write,execute permissions for world.
+      4. Changing groupname of /u01/app/oraInventory to oinstall.
+		  
+Why we need to run root.sh script?
+     It will perform below actions.
+	    1. The following environment variables are set as:
+                		ORACLE_OWNER= oracle
+                		ORACLE_HOME=  /u01/app/oracle/product/19.0.0/dbhome_1
+		  2. copy below files to /usr/local/bin
+				 Copying dbhome to /usr/local/bin ...
+				 Copying oraenv to /usr/local/bin ...
+				 Copying coraenv to /usr/local/bin ...
+		  3. Create /etc/oratab file...
+				  Entries will be added to the /etc/oratab file as needed by DBCA when a database is created.
+
+
+Issues we may encounter:
+=======================
+1) ./runInstaller -silent -responseFile /u01/app/oracle/product/19.3/db_1/install/response/db_install.rsp
+/u01/app/oracle/product/19.3/db_1/perl/bin/perl: error while loading shared libraries: libnsl.so.1: cannot open shared object file: No such file or directory
+
+We have installed libnsl rpm as dnf install -y libnsl(with root user)
+
+2) ./runInstaller -silent -responseFile /u01/app/oracle/product/19.3/db_1/install/response/db_install.rsp
+Launching Oracle Database Setup Wizard...
+
+[WARNING] [INS-08101] Unexpected error while executing the action at state: 'supportedOSCheck'
+   CAUSE: No additional information available.
+   ACTION: Contact Oracle Support Services or refer to the software manual.
+   SUMMARY:
+       - java.lang.NullPointerException
+Moved the install session logs to:
+ /u01/app/oraInventory/logs/InstallActions2022-04-11_01-36-50PM
+
+
+In order to fix above issue do the following steps
+
+Permanent Fix:
+cd /u01/app/oracle/product/19.3/db_1/cv/admin
+vi cvu_config
+CV_ASSUME_DISTID=OEL7.8                 --> modify CV_ASSUME_DISID from OEL5 to OEL7.8
+
+Work Around:
+export CV_ASSUME_DISTID=OEL7.8 and retry installation command.
