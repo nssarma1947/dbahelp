@@ -1,0 +1,77 @@
+Oracle database creation manually.
+
+step 1: login as oracle user and set the environment.
+
+         export ORACLE_SID=orcl
+         export ORACLE_HOME=/u01/app/oracle/product/19.3/db_1
+	     export PATH=$ORACLE_HOME/bin:$PATH:$HOME/bin
+		 
+step 2: change to ORACLE_HOME/dbs  and copy the sample init file.
+
+        cd $ORACLE_HOME/dbs
+		cp init.ora initorcl.ora
+		
+step 3: Edit the initSID.ora file as below 
+			vi initorcl.ora
+			db_block_size=8192
+			db_name='orcl'
+			open_cursors=300
+			processes=150
+			shared_pool_size=150m
+			sga_target=750m
+			undo_tablespace='UNDOTBS1'
+			control_files='/u01/app/oracle/oradata/control01.ctl'
+			db_create_file_dest='/u01/app/oracle/oradata'
+			diagnostic_dest='/u01/app/oracle'
+			
+			save the file.
+step 4: connect and startup instance in nomount state.
+        sqlplus / as sysdba
+		startup nomount 
+		
+		
+step 5: Execute the below complete create database statement.
+
+CREATE DATABASE orcl
+LOGFILE GROUP 1 ('/u01/app/oracle/oradata/redo01a.log') SIZE 5M,
+GROUP 2 ('/u01/app/oracle/oradata/redo02a.log') SIZE 5M
+DATAFILE '/u01/app/oracle/oradata/system01.dbf' SIZE 200M REUSE autoextend on next 10m
+SYSAUX DATAFILE '/u01/app/oracle/oradata/sysaux01.dbf' SIZE 200M REUSE autoextend on
+Default TEMPORARY TABLESPACE TEMPTS
+TEMPFILE '/u01/app/oracle/oradata/tempts01.dbf' SIZE 20M REUSE
+UNDO TABLESPACE UNDOTBS1
+DATAFILE '/u01/app/oracle/oradata/undotbs01.dbf' SIZE 25M REUSE;
+
+step 6: Execute catalog.sql script to build dictionary views as / as sysdba .
+
+        @/u01/app/oracle/product/19.3/db_1/rdbms/admin/catalog.sql
+		
+step 7: Shutdown the database and start it in upgrade state and execute catproc.sql script as / as sysdba.
+
+		@/u01/app/oracle/product/19.3/db_1/rdbms/admin/catproc.sql
+		
+step 8: Again shutdown the db and start up database and connect as system user then run below script.
+
+		@/u01/app/oracle/product/19.3/db_1/sqlplus/admin/pupbld.sql
+		
+step 9: Validate the database status and etc...
+
+      set pages 3000 lines 400
+      col comp_name for a40
+      col version for a30
+      col status for a12
+			select instance_name, version, startup_time,status, database_status from v$instance;
+			select name,created,open_mode,current_scn from v$database;
+      select comp_name,version,status from dba_registry;
+			select banner from v$version;
+			show parameter sga_target;
+		
+		
+
+
+		
+
+			
+
+
+		
