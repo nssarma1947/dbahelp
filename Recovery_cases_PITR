@@ -1,0 +1,250 @@
+1) Full Database Restore:
+=========================
+
+$ORACLE_HOME/bin/rman target / nocatalog
+RMAN> shutdown abort;
+RMAN> startup mount;
+RMAN> restore database;
+RMAN> recover database;
+RMAN> alter database open;
+
+2) Point In Time Recovery (PITR)
+========================================
+Step1: Create a table name April
+
+create table April (id number, sal varchar2(10));
+
+insert into April values(1,'100');
+
+insert into April values(2,'200');
+
+commit;
+
+Step2: Take full backup
+
+cat rman_orcl_backup.cmd
+
+run {
+allocate channel ch1 device type disk;
+backup database format '/u01/app/backup/orcl_%U.bkp' plus archivelog format '/u01/app/backup/orcle_arc_%U.bkp' tag 'ForBackup';
+release channel ch1;
+}
+
+nohup rman target / msglog=/u01/app/backup/rman_orcl_bkp.log cmdfile=/u01/app/backup/rman_orcl_backup.cmd &
+
+Step3: Drop table after completion of the backup
+
+drop table April;
+
+Note: Note down the time using date command
+
+Step4: Switch logfile for 4 to 5 times.
+
+alter system switch logfile;
+
+alter system switch logfile;
+
+alter system switch logfile;
+
+alter system switch logfile;
+
+Step5:shutdown the database.
+
+shut immediate
+
+Step6: create a new directory 
+
+cd /u01/app/oracle/oradata/orcl/
+mkdir orcl_bkp
+
+Step7: Move data files and logfiles to new directory orcl_bkp
+
+mv *.dbf orcl_bkp
+mv *.log orcl_bkp
+
+Step8: start the database in mount.
+
+startup mount
+
+Step9: connect to rman target and restore the datafiles from the backup.
+
+rman target /
+
+rman> restore database until time "to_date('30/04/22 13:50:00','DD/MM/YY HH24:MI:SS')";->replace the time note down in the step3.
+
+Step10: Recover the database until the time the table has been drop.
+rman> recover database until time "to_date('30/04/22 13:50:00','DD/MM/YY HH24:MI:SS')";
+
+Step11: Open the database using restlogs option.
+alter database oipen resetlogs;
+
+Step12: Verfiry whether the dropped table has been recoverd or note
+
+select * from April;
+
+
+II)  Scenario Basis of Recovery
+
+1) If you lost all data files
+
+SQL> startup mount;
+RMAN> restore database;
+RMAN> recover database;
+SQL> alter database open;
+
+2) If you lost a tablespace
+
+SQL> alter tablespace users offline;
+RMAN> restore tablespace users;
+RMAN> recover tablespace users;
+SQL> alter tablespace users online;
+
+ if you can not offline tablespace;
+
+$ sqlplus “/ as sysdba”
+SQL> shutdown abort;
+SQL> startup mount;
+$ rman target / rman/rman123@orcl
+RMAN> restore tablespace users;
+RMAN> recover tablespace users;
+SQL> alter database open;
+
+3) if you lost a datafile
+
+SQL> alter database datafile '/u01/app/oracle/oradata/orcl/users.dbf' offline;
+RMAN> restore datafile '/u01/app/oracle/oradata/orcl/users.dbf'
+RMAN> recover datafile '/u01/app/oracle/oradata/orcl/users.dbf'
+SQL> alter database datafile '/u01/app/oracle/oradata/orcl/users.dbf' online;
+ 
+if you cannot offline datafile;
+
+$ sqlplus “/ as sysdba”
+SQL> shutdown abort;
+SQL> startup mount;
+$ rman target / rman/rman123@orcl
+RMAN> restore datafile '/u01/app/oracle/oradata/orcl/users.dbf';
+RMAN> recover datafile '/u01/app/oracle/oradata/orcl/users.dbf';
+SQL> alter database open;
+ 
+
+
+4)  if you lost your controlfiles
+
+
+$ sqlplus “/ as sysdba”
+SQL> shutdown abort;
+SQL> startup nomount;
+$ rman target / rman/rman123@orcl
+RMAN> set dbid = 3970640872;
+RMAN> restore controlfile;
+SQL> alter database mount;
+SQL> alter database open;
+
+you will receive an error ORA-01589 when you open database
+ ORA-01589: must use RESETLOGS or NORESETLOGS option for database open
+
+
+SQL> shutdown abort;
+SQL> startup mount;
+$ rman target / rman/rman123@orcl
+RMAN> recover database;
+SQL> alter database open resetlogs;
+RMAN> reset database;
+
+if you open database with resetlogs, SCN number will be zero. In this situation
+ all previous backups will be invalid. You must full backup.
+
+5) May be a special situation. You need to incomplete recovery
+
+
+A. Time-Based incomplete recovery
+
+$ sqlplus "/ as sysdba"
+SQL> shutdown abort;
+SQL> startup mount;
+$ rman target / rman/rman123@orcl
+RMAN> restore database until time "to_date('30/04/22 13:50:00','DD/MM/YY HH24:MI:SS')";
+RMAN> recover database until time "to_date('30/04/22 13:50:00','DD/MM/YY HH24:MI:SS')";
+SQL> alter database open resetlogs;
+ 
+
+B. SCN-Based incomplete recovery
+
+
+$ sqlplus "/ as sysdba"
+SQL> shutdown abort;
+SQL> startup mount;
+$ rman target / rman/rman123@orcl
+RMAN> restore database until scn <scn number>;
+RMAN> recover database until scn <scn number>;
+SQL> alter database open resetlogs;
+
+
+C. Archive log sequence based incomplete recovery
+
+$ sqlplus "/ as sysdba"
+SQL> shutdown abort;
+SQL> startup mount;
+$ rman target / rman/rman123@orcl
+RMAN> restore database until sequence <>;
+RMAN> recover database until sequence <>;
+SQL> alter database open resetlogs;
+
+
+6)  if you need some archive logs in your backup
+
+
+$ rman target / rman/rman123@orcl
+RMAN> restore ARCHIVELOG FROM TIME 'SYSDATE-1' UNTIL TIME 'SYSDATE';
+ 
+OR
+
+
+RMAN> restore ARCHIVELOG FROM TIME "to_date('07/11/05 00:00:01','MM/DD/YY HH24:MI:SS')
+UNTIL TIME 'SYSDATE';
+ 
+
+7) if your data block is corrupted you will receive an error below.
+
+Error:
+ ORA-01578: ORACLE data block corrupted (file # , block # )
+ ORA-01110: data file : 
+
+for recover data block;
+
+
+$ rman target / rman/rman123@orcl
+RMAN>blockrecover datafile <> block <>;
+ 
+For Block-Level Media Recovery – Concept & Example (Doc ID 144911.1)
+
+ To recover, we can give a specific backup set;
+
+
+# recovery from backupset
+
+RMAN> BLOCKRECOVER DATAFILE 8 BLOCK 13 DATAFILE 2 BLOCK 19 FROM BACKUPSET;
+
+# recovery from image copy
+
+RMAN> BLOCKRECOVER DATAFILE 8 BLOCK 13 DATAFILE 2 BLOCK 19
+      FROM DATAFILECOPY;
+
+# recovery from backupset which have "FULL" tag
+
+RMAN> BLOCKRECOVER DATAFILE 8 BLOCK 13 DATAFILE 2 BLOCK 199
+       FROM TAG = FULL;
+During backup or “Validate Backup” command, RMAN finds corrupted blocks and writes to V$DATABASE_BLOCK_CORRUPTION view. When the RMAN recover the corrupt block then automatically updates this view. List of all the corruption of the past, can be viewed over V$BACKUP_CORRUPTION and V$COPY_CORRUPTION views.  If you run the following command,  RMAN will recover all the corrupted blocks in view V$DATABASE_BLOCK_CORRUPTION.
+
+
+  RMAN>BLOCKRECOVER CORRUPTION LIST RESTORE UNTIL TIME 'SYSDATE-10';
+
+8) if you have a image copy backup and your datafile number 2 has problems then you
+
+can switch datafile number2 to image copy.
+
+
+RMAN>sql 'alter database datafile 5 offline';
+RMAN>switch datafile 5 to copy;
+RMAN>recover datafile 5;
+RMAN>sql 'alter database datafile 5 online’;
