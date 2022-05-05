@@ -1,0 +1,216 @@
+
+BACKUP:
+
+		A backup is a copy of data. 
+		This copy can include important parts of the database, such as the control file and datafiles. 
+		A backup is a safeguard against unexpected data loss and application errors. 
+		If you lose the original data, then you can reconstruct it by using a backup.
+
+
+Backups are divided into physical backups and logical backups. 
+
+physical backups:
+				Physical backups, which are the primary concern in a backup and recovery strategy, are copies of 
+				physical database files. 
+			
+				We can make physical backups with either the Recovery Manager (RMAN) utility or operating system utilities. 
+
+logical backups: 
+				Logical backup contain logical data (for example, tables and stored procedures) extracted with an Oracle utility 
+				and stored in a binary file. 
+				
+				We can use logical backups to supplement physical backups.
+				
+There are two ways to perform Oracle backup and recovery: Recovery Manager and user-managed backup and recovery.
+
+Recovery Manager (RMAN):
+					RMAN is an Oracle utility that can back up, restore, and recover database files. 
+					
+					It is a feature of the Oracle database server and does not require separate installation.
+					
+					We can also use operating system commands for backups and SQL*Plus for recovery. 
+					
+					This method, also called user-managed backup and recovery, is fully supported by Oracle, 
+					although use of RMAN is highly recommended because it is more robust and greatly simplifies administration.
+
+					Whether we use RMAN or user-managed methods, 
+					
+					We can supplement our physical backups with logical backups of schema objects made using the Export utility.
+
+					The utility writes data from an Oracle database to binary operating system files. 
+					
+					We can later use Import to restore this data into a database.
+
+How to create RMAN catalog:
+
+To create an RMAN catalog, first need to create a user with the correct privileges. 
+Connect to a new or existing database where the catalog will reside. 
+We will then create a user and grant the user the RECOVERY_CATALOG_OWNER role. 
+Starting with Oracle 12.1.0.2 the recovery catalog database must use Enterprise Edition. 
+Our recovery catalog database needs to be the same version or higher than the database we are creating the catalog for.
+
+		extend USERS tablespace datafile to 1024M;
+
+		SQL>create user rman identified by rman default tablespace USERS  quota unlimited on USERS;
+		SQL>grant create session to rman;
+		SQL>grant recovery_catalog_owner to rman;
+		
+at os prompt type rman and click on enter
+
+RMAN> connect catalog rman/rman
+RMAN> create catalog;
+
+Once the catalog has been created you can now register the database.
+
+RMAN>connect target /
+RMAN>connect catalog rman/rman
+RMAN>register database;
+
+
+How to view the current rman configuration?
+
+$rman target /
+RMAN> connect catalog rman/rman
+RMAN> show all;
+
+How to take backup using rman?
+
+case 1 : Take backup of full database with archive log files
+
+at OS Prompt:
+
+mkdir -p /u01/app/backup
+
+rman target / 
+RMAN>connect catalog rman/rman
+RMAN>backup database format '/u01/app/backup/orcl_%U.bkp' plus archivelog format '/u01/app/backup/orcl_arc_%U.bkp' tag 'ForBackup';
+
+How to view the backup information from rman prompt?
+
+RMAN>list backup summary;
+RMAN>list backup;
+RMAN> backup validate database;
+RMAN> backup validate database archivelog all;
+
+Case 2 : RMAN Tablespace backup commands
+
+RMAN> backup tablespace test;
+RMAN> backup tablespace system, users, tools;
+RMAN> backup tablespace 4;
+RMAN> backup tablespace users plus archivelog;
+RMAN> backup tablespace users include current controlfile;
+RMAN> backup tablespace users include current controlfile plus archivelog;
+RMAN> backup tablespace users section size 100M;
+RMAN> backup section size 250M tablespace users;
+
+Case 3 : RMAN backup datafile commands
+
+RMAN> backup datafile 9;
+RMAN> backup datafile '<file_name>';
+RMAN> backup datafile 1 plus archivelog;
+RMAN> backup section size 500M datafile 6;
+
+Case 4 : RMAN backup archive log  command
+
+RMAN> backup archivelog all;
+RMAN> backup archivelog all delete input;
+RMAN> backup archivelog like '/u01/app/backup/arch%' delete all input;
+RMAN> backup archivelog from time 'sysdate-3';
+RMAN> backup archivelog from sequence 100;
+RMAN> backup archivelog from sequence 999 delete input;
+RMAN> backup archivelog from sequence 123 delete all input;
+RMAN> backup archivelog from sequence 21531 until sequence 21590 format '/tmp/archive_backup.bkp';
+RMAN> backup archivelog all from sequence 1200 delete all input;
+RMAN> backup archivelog not backed up 2 times;
+RMAN> backup archivelog completion time between 'sysdate-28' and 'sysdate-7';
+RMAN> backup FORMAT='AL_%d/%t/%s/%p' archivelog like '%arc_dest%';
+
+
+Case 5 : RMAN backup control file command
+
+RMAN> backup current controlfile to '/u01/app/backup/cntrlfile.copy';
+RMAN> backup controlfile copy '/u01/app/backup/control.bkp’;
+
+
+Case 6 : RMAN backup spfile command
+
+RMAN> backup spfile;
+RMAN> backup device type sbt spfile archivelog all;
+RMAN> backup device type sbt datafilecopy all noduplicates;
+RMAN> BACKUP RECOVERY FILES;
+
+
+Case 7 : RMAN backup pluggable database command
+
+RMAN>backup pluggable database PDB1, PDB2;
+
+
+Case 8 : BACKUP set
+
+RMAN> backup backupset all;
+RMAN> backup backupset all format = '/u01/app/backup_%u.bak';
+RMAN> backup backupset completed before 'sysdate-3' delete input;
+RMAN> backup device type sbt backupset completed before 'sysdate-14' delete input;
+RMAN> backup copies 2 device type sbt backupset all;
+RMAN> backup as compressed backupset;
+RMAN> backup as compressed backupset device type disk copies 2 database format '/disk1/db_%u', '/disk2/db_%u';
+RMAN> backup as compressed backupset incremental from scn 4111140000000 database tag 'rman_recovery';
+RMAN> backup as backupset datafile '/u01/app/oracle/oradata/users01.dbf','/u01/app/oracle/oradata/tools01.dbf';
+RMAN> backup as backupset datafilecopy all;
+RMAN> backup as backupset datafilecopy all noduplicates;
+
+
+Case 9: RMAN backup as copy or IMAGE copy command
+
+RMAN> backup as copy database;
+RMAN> backup as copy copy of database from tag 'test' check logical tag 'duptest';
+RMAN> backup as copy tablespace 8;
+RMAN> backup as copy tablespace test;
+RMAN> backup as copy tablespace system, tools, users, undotbs;
+RMAN> backup as copy datafile 1;
+RMAN> backup as copy datafile 2 format '/u01/app/backup/df2.cpy' tag my_tag;
+RMAN> backup as copy current controlfile;
+RMAN> backup as copy current controlfile format '/u01/app/backup/cntrl_%U.bkp';
+RMAN> backup as copy archivelog all;
+RMAN> backup as copy datafilecopy 'bar' format 'foobar';
+RMAN> backup as copy datafilecopy '/disk2/df2.cpy' format '/disk1/df2.cpy';
+
+Case 10 : RMAN Incremental backups
+
+RMAN> backup incremental level=0 database;
+RMAN> backup incremental level=1 database;
+RMAN> backup incremental level=0 database plus archivelog;
+RMAN> backup incremental level 1 cumulative skip inaccessible database;
+RMAN> backup incremental level 1 for recover of copy with tag 'incr' database;
+RMAN> backup device type disk incremental level 1 for recover of copy with tag 'oltp' database;
+RMAN> backup device type disk incremental from scn 351986 database format '/tmp/incr_standby_%u';
+RMAN> backup incremental from scn 629184 datafile 5 format '/tmp/forstandby_%u' tag 'forstandby';
+
+
+We will use channels and put the command in a run block as below.
+
+run {
+allocate channel ch1 device type disk;
+allocate channel ch2 device type disk;
+backup database format '/u01/app/backup/orcl_%U.bkp' plus archivelog format '/u01/app/backup/orcle_arc_%U.bkp' tag 'ForBackup';
+release channel ch1;
+release channel ch2;
+}
+
+How to run backup in background in linux?
+
+We need to use nohup command.
+
+
+first create a file as below.
+
+vi rman_orcl_backup.cmd
+run {
+allocate channel ch1 device type disk;
+backup database format '/u01/app/backup/orcl_%U.bkp' plus archivelog format '/u01/app/backup/orcle_arc_%U.bkp' tag 'ForBackup';
+release channel ch1;
+}
+
+command to run in nohup is below:
+
+nohup rman target / msglog=/u01/app/backup/rman_orcl_bkp.log cmdfile=/u01/app/backup/rman_orcl_backup.cmd &
