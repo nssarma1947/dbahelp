@@ -1,0 +1,152 @@
+Oracle datapump expdp and impdp utilities:
+
+--> Oracle Data Pump is a fast data movement utility provided by Oracle. 
+--> It’s an upgrade to old export and import utility. 
+--> The Data Pump utility has been built from scratch and it has a completely different architecture.
+
+Create Data Pump Directory:
+---------------------------
+
+The first step in Oracle Data Pump is to create an OS level directory which will be used by Oracle 
+for performing exports and imports. 
+
+
+	--> Create directory at OS level
+			mkdir -p /u01/exp_dir
+			
+	--> Create directory inside the database
+			SQL> create or replace directory datapump as '/u01/exp_dir';
+			
+	--> Grant permissions on directory
+			SQL> grant read,write on directory datapump to system; 
+
+	--> View directory information
+			SQL> set lin 400
+			SQL> col owner for a20
+			SQL> col DIRECTORY_NAME for a30
+			SQL> col DIRECTORY_PATH for a45
+			SQL> select * from dba_directories;
+			
+	--> Get help on expdp or impdp utility
+			expdp help=y
+			impdp help=y
+			
+Table Export and Import:
+------------------------
+
+1) Take table level export
+
+		expdp directory=datapump dumpfile=emp_exp.dmp logfile=emp_exp.log tables='test.emp'
+
+2) Import table where source and target schema are same
+
+		impdp directory=datapump dumpfile=emp_exp.dmp logfile=emp_imp.log tables='test.emp'
+
+3) Import table to another schema
+
+		impdp directory=datapump dumpfile=emp_exp.dmp logfile=imp_emp_new.log tables='test.emp' remap_schema='test:test_new'
+
+4) Import tables to another tablespace (only in datapump)
+
+		impdp directory=datapump dumpfile=emp_bkp.dmp logfile=imp_emp.log tables='table_name' remap_schema='old_schema:new_schema' remap_tablespace='old_schema_tablespace:new_schema_tablespace'
+
+5) Import table to a different name or rename table or remap_table
+
+		impdp directory=datapump dumpfile=emp_bkp.dmp logfile=imp_emp.log tables='table_name' remap_table='old_schema.table_name:new_schema.new_table_name'
+
+6) Import only the rows from an exported table without loading table any table definitions
+
+		impdp directory=datapump dumpfile=emp_exp.dmp logfile=emp_imp.log tables='test.emp' content=DATA_ONLY
+
+
+Schema Export and Import
+=========================
+
+	--> Take schema level export
+			expdp directory=datapump dumpfile=schema_bkp.dmp logfile=schema_bkp.log schemas='schema anme'
+	
+	--> Import source schema objects into same schema on target
+			impdp directory=datapump dumpfile=schema_bkp.dmp logfile=imp_schema.log remap_schema='schema_name:schema_name'
+	
+	--> Import source schema objects into a different schema on target
+			impdp directory=datapump dumpfile=schema_bkp.dmp logfile=imp_schema.log remap_schema='old_schema:New_schema'	
+      
+ Database Export and Import
+===============================
+	--> Take database level export
+			expdp directory=datapump dumpfile=fullprod.dmp logfile=fullprod.log full=y
+
+	--> Import full database
+
+		--> On source
+			SQL> select name from v$tablespace;
+
+		--> On target
+			SQL> select name from v$tablespace;
+
+				--> Create missing tablespaces on target
+				--> Make sure target tablespace has enough free space
+
+		impdp directory=datapump dumpfile=fullprod.dmp logfile=imp_fullprod.log full=y
+    
+    I) Data Pump Performance Tuning
+
+You can always use DIRECT=y parameter to perform faster exports and imports. 
+You can also use PARALLEL parameter to start multiple export and import process for faster performance.
+
+Make sure to use %U with the dumpfile name so multiple dumpfiles can be read/write simultaneously 
+expdp directory=DUMP_DIR dumpfile=schema_%U.dmp logfile=expdp_schema.log schemas=schema parallel=4
+
+impdp directory=DUMP_DIR dumpfile=schema_%U.dmp logfile=impdp_schema.log schemas=schema parallel=4
+
+
+II) EXPDP PAR File Example
+
+Data Pump jobs can be automated using PAR file. 
+You basically create one par file which contains all the export or import parameters and just call the par file at expdp utility
+
+vi exp.par
+
+Username=username/password
+tables=schema.tablename
+directory=EXP_DIR
+dumpfile=exp.dmp
+logfile=exp.log
+parallel=7
+
+And! Its very simple to call the above export PAR file
+
+expdp parfile=exp.par
+
+III)Schedule Data Pump Export in crontab:
+
+	--> Create a file which contains expdp script
+
+			vi daily_export.sh
+				export DATE=$(date +%m_%d_%y_%H_%M)
+				export ORACLE_SID=orcl
+				export ORACLE_HOME=/u01/app/oracle/product/19.3/db_1
+
+				$ORACLE_HOME/bin/expdp username/password@sid directory=export_dir dumpfile=backup_$DATE.dmp logfile=backup_$DATE.log full=y
+
+	--> Give permissions to execute on above file
+				chmod 755 daily_export.sh
+				
+	-->	Schedule export under crontab
+				crontab –e 
+				00 20 * * * /home/oracle/backup_script
+				
+				
+IV) Data Pump Export Progress %
+
+When you run a data pump export in the background and want to know the progress status, 
+use below query to get the percentage (%) completion of the export process
+
+SELECT SID, SERIAL#, USERNAME, CONTEXT, SOFAR, TOTALWORK,ROUND(SOFAR/TOTALWORK*100,2) "%_COMPLETE"
+FROM V$SESSION_LONGOPS 
+WHERE TOTALWORK != 0 
+AND SOFAR <> TOTALWORK;				
+
+
+			
+
